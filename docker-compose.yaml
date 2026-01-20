@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  video-worker:
+    build: .
+    container_name: video_worker
+    restart: always
+    ports:
+      - "8001:8000"  # Внешний порт 8001, внутренний 8000
+    volumes:
+      - ./uploads:/app/uploads  # Прокидываем папку загрузок (файлы вставок)
+      - ./temp:/app/temp        # Прокидываем temp (для отладки, если надо)
+    env_file:
+      - .env
+    # --- МАГИЯ GPU ---
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1       # Количество карт
+              capabilities: [gpu, video]
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - instagram-net
+
+networks:
+  instagram-net:
+    external: true
