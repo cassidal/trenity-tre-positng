@@ -22,9 +22,3 @@ services:
               capabilities: [gpu, video]
     environment:
       - PYTHONUNBUFFERED=1
-    networks:
-      - instagram-net
-
-networks:
-  instagram-net:
-    external: true
