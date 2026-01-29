@@ -23,3 +23,7 @@ class TaskAcceptedResponse(BaseModel):
     message: str
     request_id: str
     status: str
+
+
+class UploadInsertRequest(BaseModel):
+    video_url: str

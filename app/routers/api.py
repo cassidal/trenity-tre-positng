@@ -1,7 +1,10 @@
-import shutil
-from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File
+import httpx
+from pathlib import Path
+from urllib.parse import urlparse, unquote
 
-from app.models import BatchProcessRequest, TaskAcceptedResponse
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+
+from app.models import BatchProcessRequest, TaskAcceptedResponse, UploadInsertRequest
 from app.services.pipeline_service import PipelineService
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -30,15 +33,32 @@ async def process_batch_videos(
         status="pending"
     )
 
+def _filename_from_url(url: str) -> str:
+    """Извлекает имя файла из URL или возвращает имя по умолчанию."""
+    path = urlparse(url).path
+    name = unquote(Path(path).name.strip())
+    return name or "insert_video.mp4"
+
+
 @router.post("/upload-insert")
-async def upload_insert_video(file: UploadFile = File(...)):
+async def upload_insert_video(payload: UploadInsertRequest):
     """
-    Загрузка файла-вставки на сервер воркера.
+    Принимает body {"video_url": s3_url}, скачивает видео по URL и сохраняет в uploads.
     """
     try:
-        file_path = pipeline_service.upload_dir / file.filename
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        return {"status": "uploaded", "filename": file.filename}
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(payload.video_url, timeout=60.0)
+            resp.raise_for_status()
+
+        filename = _filename_from_url(payload.video_url)
+        file_path = pipeline_service.upload_dir / filename
+        file_path.write_bytes(resp.content)
+
+        return {"status": "uploaded", "filename": filename}
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to download video: HTTP {e.response.status_code}",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
